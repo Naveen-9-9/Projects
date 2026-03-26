@@ -63,7 +63,7 @@ const authLimiter = rateLimit({
   },
   skip: (req) => {
     // Allow more frequent /auth/me requests since they're read-only and used for auth state checks
-    return req.method === 'GET' && req.path === '/auth/me';
+    return req.method === 'GET' && (req.path === '/me' || req.originalUrl.endsWith('/auth/me'));
   }
 });
 
@@ -80,8 +80,10 @@ const authMeLimiter = rateLimit({
   }
 });
 
-// Apply general rate limiter to all routes (skip in tests)
-if (process.env.NODE_ENV !== 'test') {
+const isDevOrTest = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
+
+// Apply general rate limiter to all routes (skip in tests/dev)
+if (!isDevOrTest) {
   app.use(generalLimiter);
 }
 
@@ -99,10 +101,10 @@ app.get('/health', (req, res) => {
 
 // API routes
 // API routes
-app.use('/auth', process.env.NODE_ENV === 'test' ? (req, res, next) => next() : authLimiter, authRoutes);
+app.use('/auth', isDevOrTest ? (req, res, next) => next() : authLimiter, authRoutes);
 
 // Apply more lenient rate limiting to /auth/me specifically
-app.use('/auth/me', process.env.NODE_ENV === 'test' ? (req, res, next) => next() : authMeLimiter);
+app.use('/auth/me', isDevOrTest ? (req, res, next) => next() : authMeLimiter);
 app.use('/tools', toolRoutes);
 app.use('/comments', ratingRoutes);
 app.use('/search', searchRoutes);
