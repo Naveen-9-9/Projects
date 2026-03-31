@@ -18,6 +18,12 @@ const commentSchema = new mongoose.Schema({
     maxlength: [1000, 'Comment cannot exceed 1000 characters'],
     minlength: [1, 'Comment cannot be empty']
   },
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
   parentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Comment',

@@ -1,10 +1,11 @@
 const Comment = require('../data-access/commentModel');
+const Tool = require('../../tools/data-access/toolModel');
 const { ValidationError, NotFoundError, ForbiddenError } = require('../../../libraries/errors');
 const logger = require('../../../libraries/logger');
 
 class CommentService {
   // Add a new comment or reply
-  async addComment(toolId, userId, text, parentId = null) {
+  async addComment(toolId, userId, text, rating = null, parentId = null) {
     try {
       // Validate parent comment exists and belongs to the same tool
       if (parentId) {
@@ -26,6 +27,7 @@ class CommentService {
         toolId,
         userId,
         text: text.trim(),
+        rating,
         parentId
       });
 
@@ -37,6 +39,11 @@ class CommentService {
           $push: { replies: comment._id },
           $inc: { replyCount: 1 }
         });
+      }
+
+      // If this is a top-level review with a rating, update the tool's average rating
+      if (!parentId && rating !== null) {
+        await this._updateToolStats(toolId);
       }
 
       // Populate user data for response
@@ -135,6 +142,12 @@ class CommentService {
       );
 
       logger.info(`Comment deleted: ${commentId}`);
+
+      // If this was a top-level review with a rating, update the tool's average rating
+      if (!comment.parentId && comment.rating !== null) {
+        await this._updateToolStats(comment.toolId);
+      }
+
       return { message: 'Comment deleted successfully' };
     } catch (error) {
       logger.error('Error deleting comment:', error);
@@ -216,6 +229,42 @@ class CommentService {
     } catch (error) {
       logger.error('Error getting comment by ID:', error);
       throw error;
+    }
+  }
+  // Update tool's average rating and review count
+  async _updateToolStats(toolId) {
+    try {
+      const stats = await Comment.aggregate([
+        { 
+          $match: { 
+            toolId: new require('mongoose').Types.ObjectId(toolId), 
+            isActive: true, 
+            parentId: null, 
+            rating: { $ne: null } 
+          } 
+        },
+        {
+          $group: {
+            _id: '$toolId',
+            averageRating: { $avg: '$rating' },
+            reviewCount: { $sum: 1 }
+          }
+        }
+      ]);
+
+      if (stats.length > 0) {
+        await Tool.findByIdAndUpdate(toolId, {
+          averageRating: Math.round(stats[0].averageRating * 10) / 10,
+          reviewCount: stats[0].reviewCount
+        });
+      } else {
+        await Tool.findByIdAndUpdate(toolId, {
+          averageRating: 0,
+          reviewCount: 0
+        });
+      }
+    } catch (error) {
+      logger.error('Error updating tool stats:', error);
     }
   }
 }
