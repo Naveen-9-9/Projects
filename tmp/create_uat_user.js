@@ -1,6 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const User = require('./apps/users/data-access/userModel');
+const User = require('../apps/users/data-access/userModel');
 
 async function createUatUser() {
   try {
